@@ -1,0 +1,26 @@
+---
+- name: Request Certificate From ADCS and add to Root CA Store
+  win_shell: |
+    $CA_Server = "{{ ludus_dc_hostname }}"
+    $ExportPath = "C:\windows\tasks\ludus-ca.cer"
+
+    $session = New-PSSession -ComputerName $CA_Server
+
+    Invoke-Command -Session $session -ScriptBlock {
+        Get-ChildItem -Path Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*CN={{ adfs_CA }}*" } |
+        Select-Object -First 1 |
+        Export-Certificate -FilePath "C:\windows\tasks\ludus-ca.cer"
+    }
+
+    Copy-Item -Path $ExportPath -Destination $ExportPath -FromSession $session
+    $storeLocation = "Cert:\LocalMachine\Root"
+    Import-Certificate -FilePath $ExportPath -CertStoreLocation $storeLocation
+    Remove-PSSession $session
+
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+

@@ -1,0 +1,4 @@
+---
+ludus_install_directory: /opt/ludus
+
+#adfs_CA: "ludus-CA"

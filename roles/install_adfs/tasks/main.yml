@@ -1,0 +1,101 @@
+---
+- name: Enable update service
+  ansible.windows.win_service:
+    name: Windows Update
+    state: started
+    start_mode: auto
+
+- name: Disable Domain firewall
+  community.windows.win_firewall:
+    state: disabled
+    profiles:
+      - Domain
+      - Public
+      - Private
+
+- name: Install ADFS Federation role
+  win_feature:
+    name: ADFS-Federation, RSAT, RSAT-AD-PowerShell
+    state: present
+    include_management_tools: yes
+
+- name: Create ADFS Service Account
+  microsoft.ad.user:
+    name: '{{ adfs_service_account }}'
+    password: '{{ adfs_service_account_password }}'
+    state: present
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+- name: Add ADFS Service Account to Domain Admins group
+  community.windows.win_domain_group_membership:
+    name: 'Domain Admins'
+    members:
+      - "{{ adfs_service_account }}"
+    state: present
+    domain: "{{ ludus_domain_fqdn }}"
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+- name: Request Certificate
+  win_shell: |
+    @"
+    [Version]
+    Signature = "`$WindowsNT$"
+    [NewRequest]
+    Subject = "{{ adfs_certificate_subject }}"
+    Exportable = TRUE
+    KeyLength = 2048
+    [RequestAttributes]
+    CertificateTemplate=WebServer
+    [Extensions]
+    2.5.29.17 = "{text}"
+    _continue_ = "DNS={{ adfs_hostname }}"
+
+    "@ | Set-Content -Path "C:\windows\tasks\policy.inf"
+
+    cd c:\windows\tasks
+    certreq.exe -new -q -config "{{ adfs_FQDN_CA }}" policy.inf request.csr
+    certreq.exe -submit -q -config "{{ adfs_FQDN_CA }}" request.csr response.cer cert.p7b response.ful
+    $certPath = "C:\windows\tasks\response.cer"
+    Import-Certificate -FilePath $certPath -CertStoreLocation Cert:\LocalMachine\My
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+- name: Import the ADFS module in PowerShell
+  win_shell: |
+    Import-Module ADFS
+  register: adfs_module_import
+
+- name: Install ADFS Role
+  win_shell: |
+    $username = "{{ ludus_domain_fqdn }}\{{ adfs_service_account }}"
+    $password = "{{ adfs_service_account_password }}"
+    $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+    $serviceAccountCredential = New-Object System.Management.Automation.PSCredential ($username, $securePassword)
+
+    $CertFingerprint = (Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { $_.Subject -like "*{{ ludus_domain_fqdn }}*" } | Select-Object -First 1).Thumbprint
+    Install-AdfsFarm -CertificateThumbprint $CertFingerprint -FederationServiceDisplayName '{{ adfs_service_display_name }}' -FederationServiceName '{{ adfs_hostname }}' -ServiceAccountCredential $serviceAccountCredential -OverwriteConfiguration > c:\windows\tasks\ADFS-Log.txt 2>&1
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+  register: install_adfs_output
+
+- name: Run Set-AdfsProperties to enable IdP initiated sign-on page
+  win_shell: |
+    Set-AdfsProperties -EnableIdPIn $True

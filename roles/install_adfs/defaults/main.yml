@@ -1,0 +1,10 @@
+---
+ludus_install_directory: /opt/ludus
+
+#adfs_service_account: "adfs_svc"
+#adfs_service_account_password: "password"
+#adfs_service_display_name: "ADFS Service"
+#adfs_hostname: "adfs.ludus.nuketown"
+#adfs_FQDN_CA: "DC01.ludus.nuketown\\ludus-CA"
+#adfs_certificate_subject: "CN=adfs.ludus.nuketown, O=Ludus, C=US"
+

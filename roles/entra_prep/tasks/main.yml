@@ -1,0 +1,88 @@
+---
+- name: Enable update service
+  ansible.windows.win_service:
+    name: Windows Update
+    state: started
+    start_mode: auto
+
+- name: Disable Domain firewall
+  community.windows.win_firewall:
+    state: disabled
+    profiles:
+      - Domain
+      - Public
+      - Private
+
+- name: Install RSAT tools
+  win_feature:
+    name: RSAT, RSAT-AD-PowerShell
+    state: present
+    include_management_tools: yes
+
+- name: Add Entra domain as alternative UPN to on prem domain
+  win_shell: |
+    Get-ADForest | Set-ADForest -UPNSuffixes @{add="{{ ludus_entra_join_alt_upn }}"}
+  when: ludus_entra_join_alt_upn is defined and ludus_entra_join_alt_upn != ""
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+
+# From https://gist.githubusercontent.com/Apoc70/cf67890227d61416ee767729e3b881df/raw/5d09f909837cd4ac4a0f4e7f698e06b893a070d7/Set-TLS12.ps1
+- name: Copy script to host which enables TLS.1.2 required for AzureADConnect
+  ansible.builtin.copy:
+    src: files/Set-TLS12.ps1
+    dest: C:\Windows\Tasks\Set-TLS12.ps1  
+    remote_src: no
+
+- name: Enable TLS1.2
+  win_shell: |
+    powershell.exe -ep bypass c:\windows\tasks\Set-TLS12.ps1 -DisableLegacyTls
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+- name: Restart computer
+  win_reboot:
+    reboot_timeout: 600       
+    test_command: whoami       
+    pre_reboot_delay: 5       
+    post_reboot_delay: 10     
+
+- name: Create Entra Connect Service Account
+  microsoft.ad.user:
+    name: '{{ ludus_entra_join_svc_account }}'
+    password: '{{ ludus_entra_join_svc_account }}'
+    state: present
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+- name: Download AzureADConnect installer to remote computer
+  win_shell: |
+    powershell.exe -ep bypass Invoke-WebRequest -Uri "https://download.microsoft.com/download/B/0/0/B00291D0-5A83-4DE7-86F5-980BC00DE05A/AzureADConnect.msi" -OutFile "C:\Windows\Tasks\AzureADConnect.msi"
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+- name: Download Azure CLI installer to remote computer
+  win_shell: |
+    powershell.exe -ep bypass Invoke-WebRequest -Uri "https://aka.ms/installazurecliwindowsx64" -OutFile "C:\Windows\Tasks\AzureInstaller.msi"
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
