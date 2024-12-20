@@ -43,7 +43,7 @@ ludus:
       fqdn: ludus.nuketown
       role: primary-dc
     roles:
-      - bagelByt3s.ludus_adfs.install_adcs
+      - bagelbyt3s.ludus_adfs.install_adcs
 
   - vm_name: "ADFS-WinServer2022"
     hostname: "ADFS"
@@ -59,8 +59,8 @@ ludus:
       fqdn: ludus.nuketown
       role: member
     roles:
-      - bagelByt3s.ludus_adfs.import_root_cert
-      - bagelByt3s.ludus_adfs.install_adfs
+      - bagelbyt3s.ludus_adfs.import_root_cert
+      - bagelbyt3s.ludus_adfs.install_adfs
     role_vars:
       adfs_service_account: 'adfs_svc'
       adfs_service_account_password: 'password'
@@ -84,8 +84,8 @@ ludus:
       fqdn: ludus.nuketown
       role: member
     roles:
-      - bagelByt3s.ludus_adfs.import_root_cert
-      - bagelByt3s.ludus_adfs.entra_prep
+      - bagelbyt3s.ludus_adfs.import_root_cert
+      - bagelbyt3s.ludus_adfs.entra_prep
     role_vars:
       adfs_CA: "ludus-CA" 
       ludus_entra_join_svc_account: "entra_svc"
@@ -106,7 +106,7 @@ ludus:
       fqdn: ludus.nuketown
       role: member
     roles:
-      - bagelByt3s.ludus_adfs.import_root_cert
+      - bagelbyt3s.ludus_adfs.import_root_cert
     role_vars:
       adfs_CA: "ludus-CA"
 
