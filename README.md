@@ -12,8 +12,9 @@ Associated Blogpost: https://medium.com/specter-ops-posts/adfs-entra-lab-with-lu
 ## Installation in [Ludus](ludus.cloud)
 
 Install via Ansible Galaxy:
+```
 ludus ansible collection add bagelbyt3s.ludus_adfs
-
+```
 Install via git:
 
 ```
