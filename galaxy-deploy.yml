@@ -16,7 +16,7 @@
   gather_facts: false
 
   vars:
-    namespace: bagelbyt3s
+    namespace: bagelByt3s
     collection: ludus_adfs
     # Requires github_tag to be set when calling playbook.
     release_tag: "{{ github_tag.split('/')[-1] }}"
