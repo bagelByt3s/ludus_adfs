@@ -1,40 +1,52 @@
 ---
-# This workflow requires a GALAXY_API_KEY secret present in the GitHub
-# repository or organization.
-#
-# See: https://github.com/marketplace/actions/publish-ansible-role-to-galaxy
-# See: https://github.com/ansible/galaxy/issues/46
+# Automated release playbook for Ansible Collections.
+# Requires a ANSIBLE_GALAXY_TOKEN secret to be configured on the GitHub repo.
+# Usage:
+#   ansible-playbook -i 'localhost,' galaxy-deploy.yml \
+#   -e "github_tag=${{ github.ref }}"
 
-name: Release
-'on':
-  push:
-    tags:
-      - '*'
+- name: Deploy new Collection version to Galaxy.
+  hosts: localhost
+  connection: local
+  gather_facts: false
 
-defaults:
-  run:
-    working-directory: 'bagelByt3s.ludus_adfs'
+  vars:
+    namespace: synzack
+    collection: ludus_sccm
+    release_tag: "{{ github_tag.split('/')[-1] }}"
 
-jobs:
+  pre_tasks:
+    - name: Ensure ANSIBLE_GALAXY_TOKEN is set.
+      ansible.builtin.fail:
+        msg: A valid ANSIBLE_GALAXY_TOKEN must be set.
+      when: "lookup('env', 'ANSIBLE_GALAXY_TOKEN') | length == 0"
 
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the codebase.
-        uses: actions/checkout@v4
-        with:
-          path: 'bagelByt3s.ludus_adfs'
+    - name: Ensure the ~/.ansible directory exists.
+      ansible.builtin.file:
+        path: ~/.ansible
+        state: directory
+        mode: "0755"
 
-      - name: Set up Python 3.
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+    - name: Write the Galaxy token to ~/.ansible/galaxy_token
+      ansible.builtin.copy:
+        content: |
+          token: {{ lookup('env', 'ANSIBLE_GALAXY_TOKEN') }}
+        dest: ~/.ansible/galaxy_token
+        mode: "0600"
 
-      - name: Install Ansible.
-        run: pip3 install ansible-core
+  tasks:
+    - name: Ensure the galaxy.yml tag is up to date.
+      ansible.builtin.lineinfile:
+        path: galaxy.yml
+        regexp: "^version:"
+        line: 'version: "{{ release_tag }}"'
 
-      - name: Trigger a new import on Galaxy.
-        run: >-
-          ansible-galaxy role import --api-key ${{ secrets.GALAXY_API_KEY }}
-          $(echo ${{ github.repository }} | cut -d/ -f1) $(echo ${{ github.repository }} | cut -d/ -f2)
+    - name: Build the collection.
+      ansible.builtin.command: ansible-galaxy collection build
+      changed_when: true
+
+    - name: Publish the collection.
+      ansible.builtin.command: >
+        ansible-galaxy collection publish ./{{ namespace }}-{{ collection }}-{{ release_tag }}.tar.gz
+      changed_when: true
+
