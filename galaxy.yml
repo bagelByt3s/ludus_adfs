@@ -21,7 +21,7 @@ authors:
 
 ### OPTIONAL but strongly recommended
 # A short summary description of the collection
-description: A collection of roles to install and configure Microsoft's SCCM. Written for use with Ludus (ludus.cloud).
+description: A collection of roles to install and configure Microsoft's ADFS. Written for use with Ludus (ludus.cloud).
 
 # Either a single license or a list of licenses for content inside of a collection. Ansible Galaxy currently only
 # accepts L(SPDX,https://spdx.org/licenses/) licenses. This key is mutually exclusive with 'license_file'
@@ -68,3 +68,4 @@ build_ignore: []
 # 'omit_default_directives' is a boolean that controls whether the default directives are used. Mutually exclusive
 # with 'build_ignore'
 # manifest: null
+
