@@ -7,6 +7,8 @@ Roles included in this collection:
   - `bagelByt3s.ludus_adfs.install_adfs`
   - `bagelByt3s.ludus_adfs.entra_prep`
 
+Associated Blogpost: https://medium.com/specter-ops-posts/adfs-entra-lab-with-ludus-9bffbc51673f
+
 ## Installation in [Ludus](ludus.cloud)
 
 Install via git:
