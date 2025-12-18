@@ -1,0 +1,10 @@
+---
+  dns_zone: "{{ (ludus | selectattr('vm_name', 'match', inventory_hostname))[0].domain.fqdn.split('.')[0] }}"
+  dns_name: gitlab
+  dns_ip: 10.2.10.100
+  adfs_service_account: "LUDUS\\adfs_svc"
+  adfs_fqdn: adfs.ludus.nuketown
+  gpo_name: "ADFS - Local Intranet Zone"
+  adfs_url: "https://adfs.ludus.nuketown"
+  domain_dn: "DC=ludus,DC=nuketown"
+  target_ou_dn: "DC=ludus,DC=nuketown" 

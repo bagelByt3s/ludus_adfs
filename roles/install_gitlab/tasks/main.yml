@@ -1,0 +1,297 @@
+---
+- name: Find VM with ludus_elastic_container as a role
+  ansible.builtin.set_fact:
+    ludus_adfs_server: "{{ ludus | search_roles('install_adfs') }}"
+
+- name: Get ADFS Token-Signing certificate thumbprint (colon-separated)
+  ansible.windows.win_shell: |
+    $cert = Get-AdfsCertificate -CertificateType Token-Signing | Select-Object -First 1
+    $thumb = $cert.Thumbprint -replace '(.{2})', '$1:'
+    $thumb = $thumb.TrimEnd(':')
+    Write-Output $thumb
+  register: adfs_thumbprint
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- set_fact:
+    adfs_token_signing_thumbprint: "{{ adfs_thumbprint.stdout_lines[0] }}"
+
+- debug:
+    msg: "ADFS Token-Signing Thumbprint: {{ adfs_token_signing_thumbprint }}"
+
+- name: (GITLAB-CE) Install prerequisites
+  package:
+    name: "{{ package }}"
+    state: latest
+  loop: 
+    - curl
+    - openssh-server
+    - ca-certificates
+    - ufw
+  loop_control:
+    loop_var: package
+
+- name: Check existing AdGuard DNS rewrites
+  ansible.builtin.uri:
+    url: "http://{{ ludus_dns_server }}:3000/control/rewrite/list"
+    method: GET
+    user: admin
+    password: password
+    force_basic_auth: yes
+    return_content: yes
+  register: adguard_rewrite_list
+
+- name: Determine if gitlab DNS rewrite already exists
+  ansible.builtin.set_fact:
+    gitlab_rewrite_exists: >-
+      {{
+        (adguard_rewrite_list.json
+          | selectattr('domain', 'equalto', gitlab_domain)
+          | list
+          | length) > 0
+      }}
+
+- name: Add DNS rewrite via API (only if missing)
+  ansible.builtin.uri:
+    url: "http://{{ ludus_dns_server }}:3000/control/rewrite/add"
+    method: POST
+    user: admin
+    password: password
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      domain: "{{ gitlab_domain }}"
+      answer: "{{ gitlab_ip }}"
+    status_code: 200
+  when: not gitlab_rewrite_exists
+
+- name: Gather installed package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Set fact if gitlab-ce is installed
+  ansible.builtin.set_fact:
+    gitlab_installed: "{{ 'gitlab-ce' in ansible_facts.packages }}"
+
+- name: (GITLAB-CE) Download GitLab-CE Deb script
+  get_url:
+    url: https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh
+    dest: /tmp/gitlab-ce.deb.sh
+  when: not gitlab_installed 
+
+- name: (GITLAB-CE) Execute GitLab-CE Deb script
+  command: /bin/bash /tmp/gitlab-ce.deb.sh
+  when: not gitlab_installed
+
+- name: Install GitLab CE (latest)
+  ansible.builtin.apt:
+    name: gitlab-ce
+    state: present
+  environment:
+    EXTERNAL_URL: "{{ gitlab_external_url }}"
+  when:
+    - not gitlab_installed
+  
+- name: Allow UFW ports
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - 22
+    - 80
+    - 443
+
+- name: Copy gitlab.rb template
+  template:
+    src: gitlab.rb.template
+    dest: "{{ gitlab_template_dest }}"
+    force: yes
+
+- name: Ensure GitLab SSL directory exists
+  ansible.builtin.file:
+    path: "{{ gitlab_ssl_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check if GitLab TLS key exists
+  ansible.builtin.stat:
+    path: "{{ gitlab_ssl_key }}"
+  register: gitlab_key_stat
+
+- name: Check if GitLab TLS cert exists
+  ansible.builtin.stat:
+    path: "{{ gitlab_ssl_crt }}"
+  register: gitlab_crt_stat
+
+- name: Generate self-signed TLS cert for GitLab (openssl)
+  ansible.builtin.command: >
+    openssl req -x509 -nodes -newkey rsa:4096
+    -keyout {{ gitlab_ssl_key }}
+    -out {{ gitlab_ssl_crt }}
+    -days 825
+    -subj "/C=US/ST=GA/L=Atlanta/O=Ludus/OU=Labs/CN={{ gitlab_domain }}"
+    -addext "subjectAltName=DNS:{{ gitlab_domain }}"
+  args:
+    creates: "{{ gitlab_ssl_crt }}"
+  when: not gitlab_key_stat.stat.exists or not gitlab_crt_stat.stat.exists
+
+- name: Reconfigure GitLab
+  command: gitlab-ctl reconfigure
+
+- name: Restart GitLab
+  command: gitlab-ctl restart
+
+- name: Show initial root password
+  shell: cat /etc/gitlab/initial_root_password
+  register: root_pw
+  changed_when: false
+
+- name: Print initial root password
+  debug:
+    msg: "{{ root_pw.stdout }}"
+
+- name: Read GitLab certificate (PEM) from disk
+  ansible.builtin.slurp:
+    src: "{{ gitlab_ssl_crt }}"
+  register: gitlab_cert_pem_b64
+
+- name: Stash cert content for other plays
+  ansible.builtin.set_fact:
+    gitlab_cert_pem_b64: "{{ gitlab_cert_pem_b64.content }}"
+    
+- name: Create temp directory on ADFS
+  ansible.windows.win_file:
+    path: "{{ adfs_temp_dir }}"
+    state: directory
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- name: Copy GitLab cert PEM onto ADFS
+  ansible.windows.win_copy:
+    dest: "{{ adfs_gitlab_cert_path }}"
+    content: "{{ hostvars[groups['gitlab_server'][0]].gitlab_cert_pem_b64 | b64decode }}"
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- name: Import GitLab self-signed cert into LocalMachine Root (trust for HTTPS metadata fetch)
+  ansible.windows.win_powershell: 
+    script: |
+      $certPath = "{{ adfs_gitlab_cert_path }}"
+      $storePath = "Cert:\LocalMachine\Root"
+
+      $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath)
+      $thumb = $cert.Thumbprint
+
+      $existing = Get-ChildItem $storePath | Where-Object { $_.Thumbprint -eq $thumb }
+      if (-not $existing) {
+        Import-Certificate -FilePath $certPath -CertStoreLocation $storePath | Out-Null
+        Write-Output "Imported GitLab cert into LocalMachine\Root: $thumb"
+      } else {
+        Write-Output "GitLab cert already trusted in LocalMachine\Root: $thumb"
+      }
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- name: Download GitLab SAML metadata to ADFS server (retry up to 20 times)
+  ansible.windows.win_powershell:
+    script: |
+      $url  = "{{ gitlab_metadata_url }}"
+      $dest = "{{ adfs_gitlab_metadata_path }}"
+
+      Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+
+      if (-not (Test-Path $dest)) {
+        throw "Metadata download failed: $dest not found"
+      }
+
+      $len = (Get-Item $dest).Length
+      if ($len -lt 50) {
+        throw "Metadata file too small ($len bytes)"
+      }
+
+      Write-Output "Downloaded metadata to $dest ($len bytes)"
+  register: metadata_download
+  retries: 20
+  delay: 10
+  until: metadata_download is succeeded
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- name: Add or update ADFS Relying Party Trust from metadata file
+  ansible.windows.win_powershell: 
+    script: |
+      $name = "{{ adfs_rp_name }}"
+      $md   = "{{ adfs_gitlab_metadata_path }}"
+
+      $rp = Get-AdfsRelyingPartyTrust -Name $name -ErrorAction SilentlyContinue
+      if (-not $rp) {
+        Add-AdfsRelyingPartyTrust -Name $name -MetadataFile $md | Out-Null
+        Write-Output "Created relying party trust: $name"
+      } else {
+        Update-AdfsRelyingPartyTrust -TargetName $name -MetadataFile $md | Out-Null
+        Write-Output "Updated relying party trust from metadata: $name"
+      }
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- name: Allow all users to access GitLab relying party
+  ansible.windows.win_powershell:
+    script: |
+      $rpName = "{{ adfs_rp_name }}"
+      $authRules = '=> issue(Type = "http://schemas.microsoft.com/authorization/claims/permit", Value = "true");'
+      Set-AdfsRelyingPartyTrust -TargetName $rpName -IssuanceAuthorizationRules $authRules | Out-Null
+      Write-Output "Set IssuanceAuthorizationRules to Permit All for $rpName"
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- name: Set GitLab RP claims rules (NameID=UPN and email=UPN)
+  ansible.windows.win_powershell:
+    script: |
+      $rpName = "{{ adfs_rp_name }}"
+
+      $rules = @'
+      c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"]
+      => issue(store="Active Directory",
+                types=("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"),
+                query="(&(objectClass=user)(sAMAccountName={0}));userPrincipalName;{0}",
+                param=c.Value);
+
+      c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"]
+      => issue(Type = "email", Value = c.Value);
+
+      c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"]
+      => issue(Type = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+                Value = c.Value,
+                Properties["http://schemas.xmlsoap.org/ws/2005/05/identity/claimproperties/format"]
+                = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress");
+      '@
+
+      Set-AdfsRelyingPartyTrust -TargetName $rpName -IssuanceTransformRules $rules | Out-Null
+      "Claims rules applied for $rpName"
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+
+- name: Set ADFS WIA supported user agents (Edge/Chrome + Firefox)
+  ansible.windows.win_powershell:
+    script: |
+      Set-AdfsProperties -WIASupportedUserAgents @(
+        "MSIE 6.0",
+        "MSIE 7.0; Windows NT",
+        "MSIE 8.0",
+        "MSIE 9.0",
+        "MSIE 10.0; Windows NT 6",
+        "Windows NT 6.3; Trident/7.0",
+        "Windows NT 6.3; Win64; x64; Trident/7.0",
+        "Windows NT 6.3; WOW64; Trident/7.0",
+        "Windows NT 6.2; Trident/7.0",
+        "Windows NT 6.2; Win64; x64; Trident/7.0",
+        "Windows NT 6.2; WOW64; Trident/7.0",
+        "Windows NT 6.1; Trident/7.0",
+        "Windows NT 6.1; Win64; x64; Trident/7.0",
+        "Windows NT 6.1; WOW64; Trident/7.0",
+        "Windows NT 10.0; WOW64; Trident/7.0",
+        "MSIPC",
+        "Windows Rights Management Client",
+        "=~Windows\s*NT.*Edg.*",
+        "=~Firefox.*"
+      )
+      "WIA user agents updated."
+  changed_when: false
+  delegate_to: "{{ ludus_adfs_server.vm_name }}"
