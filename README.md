@@ -6,7 +6,8 @@ Roles included in this collection:
   - `bagelByt3s.ludus_adfs.import_root_cert`
   - `bagelByt3s.ludus_adfs.install_adfs`
   - `bagelByt3s.ludus_adfs.entra_prep`
-
+  - `bagelByt3s.ludus_adfs.install_gitlab`
+  - `bagelByt3s.ludus_adfs.adfs_kerberos_auth`
 Associated Blogpost: https://medium.com/specter-ops-posts/adfs-entra-lab-with-ludus-9bffbc51673f
 
 ## Installation in [Ludus](ludus.cloud)
@@ -15,11 +16,13 @@ Install via Ansible Galaxy:
 ```
 ludus ansible collection add bagelbyt3s.ludus_adfs
 ```
-Install via git:
+Building the Collection from Source
 
 ```
-git clone https://bagelByt3s/ludus_adfs /opt/ludus_adfs
-ludus ansible collection add /opt/ludus_adfs
+git clone https://github.com/bagelbyt3s/ludus_adfs
+ansible-galaxy collection build
+python3 -m http.server 80
+ludus ansible collection add http://<network ip>/bagelbyt3s-ludus_adfs-1.1.0.tar.gz 
 ```
 
 ### Role Requirements
@@ -45,7 +48,13 @@ ludus:
       role: primary-dc
     roles:
       - bagelbyt3s.ludus_adfs.install_adcs
-
+      - bagelbyt3s.ludus_adfs.adfs_kerberos_auth
+    role_vars:
+      dns_name: gitlab
+      dns_ip: 10.2.10.100
+      adfs_service_account: "LUDUS\\adfs_svc"
+      adfs_fqdn: adfs.ludus.nuketown
+      target_ou_dn: "DC=ludus,DC=nuketown" 
   - vm_name: "ADFS-WinServer2022"
     hostname: "ADFS"
     template: win2022-server-x64-template
@@ -110,7 +119,22 @@ ludus:
       - bagelbyt3s.ludus_adfs.import_root_cert
     role_vars:
       adfs_CA: "ludus-CA"
-
+      
+  - vm_name: "{{ range_id }}-gitlab"
+    hostname: "{{ range_id }}-gitlab"
+    template: debian-12-x64-server-template
+    vlan: 10
+    ip_last_octet: 100
+    ram_gb: 8
+    cpus: 2
+    linux: true
+    roles:
+    - bagelbyt3s.ludus_adfs.install_gitlab
+    role_vars:
+      gitlab_domain: gitlab.ludus.nuketown
+      adfs_host: adfs.ludus.nuketown
+      gitlab_ip: 10.2.10.100
+      gitlab_version: 18.6.2
 ```
 
 Then set the config and deploy it
