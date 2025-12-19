@@ -8,6 +8,7 @@ gitlab_rails['omniauth_providers'] = [
     name: "saml", # This must be lowercase.
     label: "Ludus", # optional label for login button, defaults to "Saml"
     args: {
+      allowed_clock_drift: 60,
       assertion_consumer_service_url: "https://{{gitlab_domain}}/users/auth/saml/callback",
       idp_cert_fingerprint: "{{adfs_token_signing_thumbprint}}",
       idp_sso_target_url: "https://{{adfs_fqdn}}/adfs/ls",
