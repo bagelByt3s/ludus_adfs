@@ -303,8 +303,3 @@
   ansible.windows.win_command: setspn -A HTTP/{{ adfs_fqdn }} {{ adfs_service_account }}
   when: "'No such SPN found' in spn_check.stdout"
   delegate_to: "{{ dc_host }}"
-
-- name: Add HOST SPN to ADFS service account if missing
-  ansible.windows.win_command: setspn -A HOST/{{ adfs_fqdn }} {{ adfs_service_account }}
-  when: "'No such SPN found' in spn_check.stdout"
-  delegate_to: "{{ dc_host }}"
