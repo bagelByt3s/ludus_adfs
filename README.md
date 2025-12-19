@@ -8,6 +8,7 @@ Roles included in this collection:
   - `bagelByt3s.ludus_adfs.entra_prep`
   - `bagelByt3s.ludus_adfs.install_gitlab`
   - `bagelByt3s.ludus_adfs.adfs_kerberos_auth`
+
 Associated Blogpost: https://medium.com/specter-ops-posts/adfs-entra-lab-with-ludus-9bffbc51673f
 
 ## Installation in [Ludus](ludus.cloud)
@@ -51,6 +52,7 @@ ludus:
       - bagelbyt3s.ludus_adfs.adfs_kerberos_auth
     role_vars:
       dns_name: gitlab
+      dns_zone: "ludus.nuketown"
       dns_ip: 10.2.10.100
       adfs_service_account: "LUDUS\\adfs_svc"
       adfs_fqdn: adfs.ludus.nuketown
@@ -132,9 +134,9 @@ ludus:
     - bagelbyt3s.ludus_adfs.install_gitlab
     role_vars:
       gitlab_domain: gitlab.ludus.nuketown
-      adfs_host: adfs.ludus.nuketown
+      adfs_fqdn: adfs.ludus.nuketown
+      adfs_host: ADFS-WinServer2022
       gitlab_ip: 10.2.10.100
-      gitlab_version: 18.6.2
 ```
 
 Then set the config and deploy it
