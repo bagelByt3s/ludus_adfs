@@ -8,26 +8,19 @@
     ttl: 300
     state: present
 
-- name: Add HTTP and HOST SPNs to ADFS service account if missing
-  ansible.windows.win_powershell:
-    script: |
-      $account = "{{ adfs_service_account }}"
-      $spns = @("HTTP/{{ adfs_fqdn }}", "HOST/{{ adfs_fqdn }}")
-      $added = @()
-      
-      foreach ($spn in $spns) {
-        $existing = setspn -L $account 2>$null | Select-String -Pattern "^$spn$"
-        if (-not $existing) {
-          setspn -A $spn $account | Out-Null
-          $added += $spn
-        }
-      }
-      
-      if ($added.Count -gt 0) {
-        Write-Output "Added: $($added -join ', ')"
-      }
-  register: spn_result
-  changed_when: spn_result.output | length > 0
+- name: Check if HTTP SPN exists for ADFS
+  ansible.windows.win_command: setspn -Q HTTP/{{ adfs_fqdn }}
+  register: spn_check
+  changed_when: false
+  failed_when: false
+
+- name: Add HTTP SPN to ADFS service account if missing
+  ansible.windows.win_command: setspn -A HTTP/{{ adfs_fqdn }} {{ adfs_service_account }}
+  when: "'No such SPN found' in spn_check.stdout"
+
+- name: Add HOST SPN to ADFS service account if missing
+  ansible.windows.win_command: setspn -A HOST/{{ adfs_fqdn }} {{ adfs_service_account }}
+  when: "'No such SPN found' in spn_check.stdout"
 
 - name: Ensure GroupPolicy module is available
   ansible.windows.win_powershell:
