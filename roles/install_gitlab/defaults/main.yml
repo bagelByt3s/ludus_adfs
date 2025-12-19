@@ -2,6 +2,7 @@
   gitlab_domain: gitlab.ludus.nuketown
   adfs_fqdn: adfs.ludus.nuketown
   adfs_host: ADFS-WinServer2022
+  dc_host: DC01-WinServer2022
   gitlab_ip: 10.2.10.100
   gitlab_ssl_dir: /etc/gitlab/ssl
   gitlab_ssl_key: /etc/gitlab/ssl/{{ gitlab_domain }}.key

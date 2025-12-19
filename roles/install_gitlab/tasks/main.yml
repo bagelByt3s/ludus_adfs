@@ -291,3 +291,20 @@
       "WIA user agents updated."
   changed_when: false
   delegate_to: "{{ adfs_host }}"
+
+- name: Check if HTTP SPN exists for ADFS
+  ansible.windows.win_command: setspn -Q HTTP/{{ adfs_fqdn }}
+  register: spn_check
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ dc_host }}"
+
+- name: Add HTTP SPN to ADFS service account if missing
+  ansible.windows.win_command: setspn -A HTTP/{{ adfs_fqdn }} {{ adfs_service_account }}
+  when: "'No such SPN found' in spn_check.stdout"
+  delegate_to: "{{ dc_host }}"
+
+- name: Add HOST SPN to ADFS service account if missing
+  ansible.windows.win_command: setspn -A HOST/{{ adfs_fqdn }} {{ adfs_service_account }}
+  when: "'No such SPN found' in spn_check.stdout"
+  delegate_to: "{{ dc_host }}"
