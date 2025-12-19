@@ -100,6 +100,7 @@ ludus:
       gitlab_domain: gitlab.ludus.nuketown
       adfs_fqdn: adfs.ludus.nuketown
       adfs_host: ADFS-WinServer2022
+      adfs_service_account: 'ludus\adfs_svc'
       dc_host: DC01-WinServer2022
       gitlab_ip: 10.2.10.100
       gitlab_version: 18.6.2
