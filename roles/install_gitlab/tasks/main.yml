@@ -168,7 +168,7 @@
 - name: Copy GitLab cert PEM onto ADFS
   ansible.windows.win_copy:
     dest: "{{ adfs_gitlab_cert_path }}"
-    content: "{{ hostvars[groups['gitlab_server'][0]].gitlab_cert_pem_b64 | b64decode }}"
+    content: "{{ gitlab_cert_pem_b64 | b64decode }}"
   delegate_to: "{{ adfs_host }}"
 
 - name: Import GitLab self-signed cert into LocalMachine Root (trust for HTTPS metadata fetch)
