@@ -1,13 +1,13 @@
 ---
   gitlab_domain: gitlab.ludus.nuketown
-  adfs_host: adfs.ludus.nuketown
+  adfs_fqdn: adfs.ludus.nuketown
+  adfs_host: ADFS-WinServer2022
   gitlab_ip: 10.2.10.100
   gitlab_ssl_dir: /etc/gitlab/ssl
   gitlab_ssl_key: /etc/gitlab/ssl/{{ gitlab_domain }}.key
   gitlab_ssl_crt: /etc/gitlab/ssl/{{ gitlab_domain }}.crt
   gitlab_template_src: gitlab.rb.template
   gitlab_template_dest: /etc/gitlab/gitlab.rb
-  gitlab_version: 18.6.2
   gitlab_external_url: "http://{{ gitlab_domain }}"
   adfs_temp_dir: C:\Temp
   adfs_gitlab_cert_path: C:\Temp\gitlab.crt

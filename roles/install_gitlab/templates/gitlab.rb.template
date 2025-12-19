@@ -10,7 +10,7 @@ gitlab_rails['omniauth_providers'] = [
     args: {
       assertion_consumer_service_url: "https://{{gitlab_domain}}/users/auth/saml/callback",
       idp_cert_fingerprint: "{{adfs_token_signing_thumbprint}}",
-      idp_sso_target_url: "https://{{ludus_adfs_server.vm_name}}/adfs/ls",
+      idp_sso_target_url: "https://{{adfs_fqdn}}/adfs/ls",
       issuer: "https://{{gitlab_domain}}",
       name_identifier_format: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
       attribute_statements: { email: ["email"] }

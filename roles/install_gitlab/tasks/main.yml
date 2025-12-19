@@ -1,8 +1,4 @@
 ---
-- name: Find VM with ludus_elastic_container as a role
-  ansible.builtin.set_fact:
-    ludus_adfs_server: "{{ ludus | search_roles('install_adfs') }}"
-
 - name: Get ADFS Token-Signing certificate thumbprint (colon-separated)
   ansible.windows.win_shell: |
     $cert = Get-AdfsCertificate -CertificateType Token-Signing | Select-Object -First 1
@@ -10,7 +6,7 @@
     $thumb = $thumb.TrimEnd(':')
     Write-Output $thumb
   register: adfs_thumbprint
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - set_fact:
     adfs_token_signing_thumbprint: "{{ adfs_thumbprint.stdout_lines[0] }}"
@@ -18,7 +14,7 @@
 - debug:
     msg: "ADFS Token-Signing Thumbprint: {{ adfs_token_signing_thumbprint }}"
 
-- name: (GITLAB-CE) Install prerequisites
+- name: Install prerequisites
   package:
     name: "{{ package }}"
     state: latest
@@ -74,13 +70,13 @@
   ansible.builtin.set_fact:
     gitlab_installed: "{{ 'gitlab-ce' in ansible_facts.packages }}"
 
-- name: (GITLAB-CE) Download GitLab-CE Deb script
+- name: Download GitLab-CE Deb script
   get_url:
     url: https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh
     dest: /tmp/gitlab-ce.deb.sh
   when: not gitlab_installed 
 
-- name: (GITLAB-CE) Execute GitLab-CE Deb script
+- name: Execute GitLab-CE Deb script
   command: /bin/bash /tmp/gitlab-ce.deb.sh
   when: not gitlab_installed
 
@@ -167,13 +163,13 @@
   ansible.windows.win_file:
     path: "{{ adfs_temp_dir }}"
     state: directory
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - name: Copy GitLab cert PEM onto ADFS
   ansible.windows.win_copy:
     dest: "{{ adfs_gitlab_cert_path }}"
     content: "{{ hostvars[groups['gitlab_server'][0]].gitlab_cert_pem_b64 | b64decode }}"
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - name: Import GitLab self-signed cert into LocalMachine Root (trust for HTTPS metadata fetch)
   ansible.windows.win_powershell: 
@@ -191,7 +187,7 @@
       } else {
         Write-Output "GitLab cert already trusted in LocalMachine\Root: $thumb"
       }
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - name: Download GitLab SAML metadata to ADFS server (retry up to 20 times)
   ansible.windows.win_powershell:
@@ -215,7 +211,7 @@
   retries: 20
   delay: 10
   until: metadata_download is succeeded
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - name: Add or update ADFS Relying Party Trust from metadata file
   ansible.windows.win_powershell: 
@@ -231,7 +227,7 @@
         Update-AdfsRelyingPartyTrust -TargetName $name -MetadataFile $md | Out-Null
         Write-Output "Updated relying party trust from metadata: $name"
       }
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - name: Allow all users to access GitLab relying party
   ansible.windows.win_powershell:
@@ -240,7 +236,7 @@
       $authRules = '=> issue(Type = "http://schemas.microsoft.com/authorization/claims/permit", Value = "true");'
       Set-AdfsRelyingPartyTrust -TargetName $rpName -IssuanceAuthorizationRules $authRules | Out-Null
       Write-Output "Set IssuanceAuthorizationRules to Permit All for $rpName"
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - name: Set GitLab RP claims rules (NameID=UPN and email=UPN)
   ansible.windows.win_powershell:
@@ -266,7 +262,7 @@
 
       Set-AdfsRelyingPartyTrust -TargetName $rpName -IssuanceTransformRules $rules | Out-Null
       "Claims rules applied for $rpName"
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
 
 - name: Set ADFS WIA supported user agents (Edge/Chrome + Firefox)
   ansible.windows.win_powershell:
@@ -294,4 +290,4 @@
       )
       "WIA user agents updated."
   changed_when: false
-  delegate_to: "{{ ludus_adfs_server.vm_name }}"
+  delegate_to: "{{ adfs_host }}"
