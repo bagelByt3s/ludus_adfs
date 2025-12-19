@@ -1,0 +1,100 @@
+---
+- name: Ensure GitLab A record exists
+  community.windows.win_dns_record:
+    zone: "{{ dns_zone }}"
+    name: "{{ dns_name }}"
+    type: A
+    value: "{{ dns_ip }}"
+    ttl: 300
+    state: present
+
+- name: Ensure GroupPolicy module is available
+  ansible.windows.win_powershell:
+    script: |
+      if (-not (Get-Module -ListAvailable GroupPolicy)) {
+        throw "GroupPolicy PowerShell module not found. Install RSAT Group Policy Management tools on this host."
+      }
+      "GroupPolicy module OK"
+  changed_when: false
+
+- name: Create GPO if missing
+  ansible.windows.win_powershell:
+    script: |
+      $name = "{{ gpo_name }}"
+      $gpo = Get-GPO -Name $name -ErrorAction SilentlyContinue
+      if (-not $gpo) {
+        New-GPO -Name $name | Out-Null
+        "Created GPO: $name"
+      } else {
+        "GPO already exists: $name"
+      }
+  register: gpo_create
+  changed_when: "'Created GPO' in (gpo_create.output | join(' '))"
+
+- name: Set Site-to-Zone assignment for ADFS (User policy) -> Local Intranet (1)
+  ansible.windows.win_powershell:
+    script: |
+      $name = "{{ gpo_name }}"
+
+      # IMPORTANT: Must include HKCU for user policy settings
+      $key = "HKCU\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\ludus.nuketown\adfs"
+      $valueName = "https"
+      $desired = 1  # 1 = Local Intranet
+
+      $existing = Get-GPRegistryValue -Name $name -Key $key -ValueName $valueName -ErrorAction SilentlyContinue
+
+      if ($null -eq $existing -or $existing.Value -ne $desired) {
+        Set-GPRegistryValue -Name $name -Key $key -ValueName $valueName -Type DWord -Value $desired
+        "Set $valueName=$desired at $key in GPO: $name"
+      } else {
+        "Already set $valueName=$desired at $key in GPO: $name"
+      }
+  register: gpo_reg
+  changed_when: "'Set https=1' in (gpo_reg.output | join(' '))"
+
+- name: Enable automatic logon for Local Intranet zone
+  ansible.windows.win_powershell:
+    script: |
+      $name = "{{ gpo_name }}"
+      
+      # Set automatic logon for Local Intranet Zone (Zone 1)
+      # 1801 = Automatic logon with current user name and password
+      # Value 0x00000000 = Automatically logon (automatic logon with current username and password)
+      $key = "HKCU\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\1"
+      $valueName = "1A00"  # Logon setting
+      $desired = 0  # 0 = Automatic logon
+      
+      try {
+        $existing = Get-GPRegistryValue -Name $name -Key $key -ValueName $valueName -ErrorAction Stop
+        if ($existing.Value -ne $desired) {
+          Set-GPRegistryValue -Name $name -Key $key -ValueName $valueName -Type DWord -Value $desired
+          "Updated automatic logon setting"
+        } else {
+          "Automatic logon already configured"
+        }
+      }
+      catch {
+        Set-GPRegistryValue -Name $name -Key $key -ValueName $valueName -Type DWord -Value $desired
+        "Created automatic logon setting"
+      }
+  register: auto_logon
+  changed_when: "'Created' in (auto_logon.output | join(' ')) or 'Updated' in (auto_logon.output | join(' '))"
+
+- name: Link GPO to target OU (domain root or specific OU)
+  ansible.windows.win_powershell:
+    script: |
+      $name = "{{ gpo_name }}"
+      $ou = "{{ target_ou_dn }}"
+
+      # Only create link if missing
+      $inherit = Get-GPInheritance -Target $ou
+      $linked = $inherit.GpoLinks | Where-Object { $_.DisplayName -eq $name }
+
+      if (-not $linked) {
+        New-GPLink -Name $name -Target $ou -LinkEnabled Yes | Out-Null
+        "Linked GPO '$name' to '$ou'"
+      } else {
+        "GPO '$name' already linked to '$ou'"
+      }
+  register: gpo_link
+  changed_when: "'Linked GPO' in (gpo_link.output | join(' '))"

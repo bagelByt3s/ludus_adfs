@@ -1,0 +1,9 @@
+---
+  dns_zone: "ludus.nuketown"
+  dns_name: gitlab
+  dns_ip: 10.2.10.100
+  adfs_service_account: "LUDUS\\adfs_svc"
+  adfs_fqdn: adfs.ludus.nuketown
+  gpo_name: "ADFS - Local Intranet Zone"
+  adfs_url: "https://{{ adfs_fqdn }}"
+  target_ou_dn: "DC=ludus,DC=nuketown" 

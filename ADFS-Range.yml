@@ -13,7 +13,14 @@ ludus:
       role: primary-dc
     roles:
       - bagelbyt3s.ludus_adfs.install_adcs
-
+      - bagelbyt3s.ludus_adfs.adfs_kerberos_auth
+    role_vars:
+      dns_name: gitlab
+      dns_zone: "ludus.nuketown"
+      dns_ip: 10.2.10.100
+      adfs_service_account: "LUDUS\\adfs_svc"
+      adfs_fqdn: adfs.ludus.nuketown
+      target_ou_dn: "DC=ludus,DC=nuketown" 
   - vm_name: "ADFS-WinServer2022"
     hostname: "ADFS"
     template: win2022-server-x64-template
@@ -56,11 +63,10 @@ ludus:
       - bagelbyt3s.ludus_adfs.import_root_cert
       - bagelbyt3s.ludus_adfs.entra_prep
     role_vars:
-      adfs_CA: "ludus-CA"
+      adfs_CA: "ludus-CA" 
       ludus_entra_join_svc_account: "entra_svc"
       ludus_entra_join_svc_account_password: "password"
-      ludus_entra_join_alt_upn: "" #Example: LudusNuketownTesting.onmicrosoft.com or leave blank to skip
-      ludus_entra_join_password: "" #Change the password for all domain accounts because they will become hybrid users, leave blank to skip
+      ludus_entra_join_alt_upn: "" #Example: domain.onmicrosoft.com or leave blank to skip
 
   - vm_name: "Workstation-Win11"
     hostname: "Workstation"
@@ -79,6 +85,22 @@ ludus:
       - bagelbyt3s.ludus_adfs.import_root_cert
     role_vars:
       adfs_CA: "ludus-CA"
-
-
-
+      
+  - vm_name: "{{ range_id }}-gitlab"
+    hostname: "{{ range_id }}-gitlab"
+    template: debian-12-x64-server-template
+    vlan: 10
+    ip_last_octet: 100
+    ram_gb: 8
+    cpus: 2
+    linux: true
+    roles:
+    - bagelbyt3s.ludus_adfs.install_gitlab
+    role_vars:
+      gitlab_domain: gitlab.ludus.nuketown
+      adfs_fqdn: adfs.ludus.nuketown
+      adfs_host: ADFS-WinServer2022
+      adfs_service_account: 'ludus\adfs_svc'
+      dc_host: DC01-WinServer2022
+      gitlab_ip: 10.2.10.100
+      gitlab_version: 18.6.2
