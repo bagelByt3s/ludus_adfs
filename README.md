@@ -136,7 +136,10 @@ ludus:
       gitlab_domain: gitlab.ludus.nuketown
       adfs_fqdn: adfs.ludus.nuketown
       adfs_host: ADFS-WinServer2022
+      adfs_service_account: 'ludus\adfs_svc'
+      dc_host: DC01-WinServer2022
       gitlab_ip: 10.2.10.100
+      gitlab_version: 18.6.2
 ```
 
 Then set the config and deploy it
@@ -145,6 +148,7 @@ Then set the config and deploy it
 ludus range config set -f ADFS-Range.yml
 ludus range deploy
 ```
+if gitlab is not required for the deployment, remove the bagelbyt3s.ludus_adfs.adfs_kerberos_auth role from the DC and gitlab server from the yaml. The adfs environment will deploy without any preconfigured service.
 
 ## License
 
