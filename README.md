@@ -23,7 +23,7 @@ Building the Collection from Source
 git clone https://github.com/bagelbyt3s/ludus_adfs
 ansible-galaxy collection build
 python3 -m http.server 80
-ludus ansible collection add http://<network ip>/bagelbyt3s-ludus_adfs-1.1.0.tar.gz 
+ludus ansible collection add http://<network ip>/bagelbyt3s-ludus_adfs-1.2.0.tar.gz 
 ```
 
 ### Role Requirements
