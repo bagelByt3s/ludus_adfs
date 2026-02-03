@@ -152,6 +152,12 @@ ludus range deploy
 ```
 if gitlab is not required for the deployment, remove the bagelbyt3s.ludus_adfs.adfs_kerberos_auth role from the DC and gitlab server from the yaml. The adfs environment will deploy without any preconfigured service.
 
+## Known Issues
+Entra AD Connect MSI download link may change, currently set to:
+```
+powershell.exe -ep bypass Invoke-WebRequest -Uri "https://download.msappproxy.net/Subscription/d3c8b69d-6bf7-42be-a529-3fe9c2e70c90/Connector/AADConnectSyncInstaller" -OutFile "C:\Windows\Tasks\AzureADConnect.msi"
+```
+
 ## License
 
 GPLv3
