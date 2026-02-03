@@ -56,7 +56,9 @@ ludus:
       dns_ip: 10.2.10.100
       adfs_service_account: "LUDUS\\adfs_svc"
       adfs_fqdn: adfs.ludus.nuketown
-      target_ou_dn: "DC=ludus,DC=nuketown" 
+      target_ou_dn: "DC=ludus,DC=nuketown"
+      ludus_entra_join_alt_upn: "" #Example: domain.onmicrosoft.com or leave blank to skip
+ 
   - vm_name: "ADFS-WinServer2022"
     hostname: "ADFS"
     template: win2022-server-x64-template
