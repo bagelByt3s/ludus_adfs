@@ -5,5 +5,6 @@
   adfs_service_account: "LUDUS\\adfs_svc"
   adfs_fqdn: adfs.ludus.nuketown
   gpo_name: "ADFS - Local Intranet Zone"
+  entra_sso_gpo_name: "Entra - Seamless SSO"
   adfs_url: "https://{{ adfs_fqdn }}"
   target_ou_dn: "DC=ludus,DC=nuketown" 
